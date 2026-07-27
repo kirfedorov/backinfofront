@@ -191,6 +191,331 @@
   }
 }
 
+/* Classic Bootstrap-inspired UI */
+.dashboard-shell {
+  --bs-bg: #f8f9fa;
+  --bs-card: #ffffff;
+  --bs-border: #dee2e6;
+  --bs-text: #212529;
+  --bs-muted: #6c757d;
+  --bs-primary: #0d6efd;
+  --bs-primary-hover: #0b5ed7;
+  --bs-success: #198754;
+  --bs-danger: #dc3545;
+  color: var(--bs-text);
+  background: var(--bs-bg);
+}
+
+.dashboard-shell.theme-dark {
+  --bs-bg: #16191d;
+  --bs-card: #212529;
+  --bs-border: #3a4046;
+  --bs-text: #f8f9fa;
+  --bs-muted: #adb5bd;
+  --bs-primary: #3d8bfd;
+  --bs-primary-hover: #6ea8fe;
+  --panel: #212529;
+  --line: #3a4046;
+  --muted: #adb5bd;
+  background: var(--bs-bg);
+}
+
+.dashboard-shell::before,
+.control-frame::before {
+  display: none;
+}
+
+.topbar {
+  padding: 0 12px;
+  border: 1px solid var(--bs-border);
+  border-radius: 8px;
+  background: var(--bs-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.apollo-logo {
+  filter: none;
+}
+
+.brand-logo-wrap span,
+.topbar-time span,
+.side-label,
+.rail-title,
+.section-kicker,
+.panel-title span,
+.data-heading span {
+  color: var(--bs-muted);
+  letter-spacing: 0.08em;
+}
+
+.topbar-time strong,
+.frame-header h1,
+.data-heading h2,
+.panel-title strong,
+.stat-card > strong,
+.rail-card strong,
+.workload-summary strong {
+  color: var(--bs-text);
+  font-family: "Inter", sans-serif;
+}
+
+.system-pill {
+  border-color: rgba(25, 135, 84, 0.3);
+  border-radius: 6px;
+  color: var(--bs-success);
+  background: rgba(25, 135, 84, 0.1);
+  letter-spacing: 0;
+}
+
+.side-nav,
+.right-rail {
+  padding: 10px;
+  border: 1px solid var(--bs-border);
+  border-radius: 8px;
+  background: var(--bs-card);
+}
+
+.nav-card {
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--bs-muted);
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.nav-card:hover {
+  transform: none;
+  border-color: var(--bs-border);
+  color: var(--bs-text);
+  background: rgba(108, 117, 125, 0.08);
+}
+
+.nav-card.active {
+  border-color: var(--bs-primary);
+  color: #fff;
+  background: var(--bs-primary);
+  box-shadow: none;
+}
+
+.nav-card strong,
+.nav-card.active strong {
+  color: inherit;
+  font: 600 13px "Inter", sans-serif;
+}
+
+.nav-card small {
+  color: inherit;
+  font-size: 8px;
+  opacity: 0.75;
+}
+
+.control-frame {
+  border: 1px solid var(--bs-border);
+  border-radius: 8px;
+  background: var(--bs-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card,
+.panel,
+.system-strip,
+.rail-card,
+.event-feed,
+.data-table,
+.admin-add-form,
+.admin-card,
+.calendar-panel,
+.command-card,
+.doctor-calendar-editor,
+.schedule-editor,
+.schedule-matrix,
+.workload-list,
+.workload-summary article,
+.admin-duty-panel,
+.admin-load-panel {
+  border: 1px solid var(--bs-border);
+  border-radius: 6px;
+  color: var(--bs-text);
+  background: var(--bs-card);
+  box-shadow: none;
+}
+
+.stat-top,
+.doctor-identity span,
+.user-identity span,
+.room,
+.command-card p,
+.workload-person small,
+.workload-scale small,
+.admin-duty-row small,
+.admin-load-row small {
+  color: var(--bs-muted);
+}
+
+.doctor-row,
+.user-row,
+.admin-duty-row,
+.admin-load-row {
+  border-bottom-color: var(--bs-border);
+}
+
+.doctor-row:hover,
+.user-row:hover {
+  background: rgba(13, 110, 253, 0.05);
+}
+
+.doctor-identity strong,
+.user-identity strong,
+.admin-card strong,
+.workload-person strong,
+.admin-duty-row strong,
+.admin-load-row strong {
+  color: var(--bs-text);
+}
+
+.refresh-button,
+.secondary-button,
+.close-button,
+.doctor-actions button,
+.icon-action,
+.month-switcher button,
+.schedule-month-nav button,
+.calendar-panel > header button {
+  border: 1px solid var(--bs-border);
+  border-radius: 6px;
+  color: var(--bs-text);
+  background: var(--bs-card);
+  box-shadow: none;
+}
+
+.refresh-button:hover,
+.secondary-button:hover,
+.close-button:hover,
+.doctor-actions button:hover,
+.month-switcher button:hover,
+.schedule-month-nav button:hover {
+  border-color: #adb5bd;
+  color: var(--bs-text);
+  background: rgba(108, 117, 125, 0.1);
+}
+
+.heading-actions button,
+.primary-button,
+.admin-add-form button,
+.qr-access-card > button {
+  border: 1px solid var(--bs-primary);
+  border-radius: 6px;
+  color: #fff;
+  background: var(--bs-primary);
+  box-shadow: none;
+}
+
+.heading-actions button:hover,
+.primary-button:hover,
+.admin-add-form button:hover {
+  border-color: var(--bs-primary-hover);
+  background: var(--bs-primary-hover);
+  box-shadow: none;
+}
+
+.form-grid input,
+.schedule-line input,
+.admin-add-form input,
+.user-role-select {
+  border: 1px solid var(--bs-border);
+  border-radius: 6px;
+  color: var(--bs-text);
+  background: var(--bs-card);
+}
+
+.form-grid input:focus,
+.schedule-line input:focus,
+.admin-add-form input:focus,
+.user-role-select:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.18);
+}
+
+.data-heading b,
+.status,
+.access,
+.role {
+  border-radius: 4px;
+}
+
+.role-owner {
+  color: #664d03;
+  background: #fff3cd;
+}
+
+.role-admin {
+  color: #055160;
+  background: #cff4fc;
+}
+
+.role-user {
+  color: #41464b;
+  background: #e2e3e5;
+}
+
+.access.enabled {
+  color: #0f5132;
+  background: #d1e7dd;
+}
+
+.access.disabled {
+  color: #842029;
+  background: #f8d7da;
+}
+
+.dashboard-slider {
+  border-color: var(--bs-border);
+  border-radius: 6px;
+  background: var(--bs-bg);
+}
+
+.dashboard-slider button {
+  border-radius: 4px;
+  color: var(--bs-muted);
+}
+
+.dashboard-slider button.active {
+  color: #fff;
+  background: var(--bs-primary);
+  box-shadow: none;
+}
+
+.connection-card {
+  border: 1px solid rgba(25, 135, 84, 0.3);
+  border-radius: 6px;
+  color: var(--bs-success);
+  background: rgba(25, 135, 84, 0.08);
+}
+
+.doctor-editor {
+  border: 1px solid var(--bs-border);
+  border-radius: 8px;
+  color: var(--bs-text);
+  background: var(--bs-card);
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.2);
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: none;
+}
+
+.toast {
+  border: 1px solid #badbcc;
+  border-radius: 6px;
+  color: #0f5132;
+  background: #d1e7dd;
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+}
+
 @media (max-width: 540px) {
   .schedule-editor {
     grid-template-columns: repeat(2, minmax(100px, 1fr));
