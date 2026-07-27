@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIcon as Activity,
   BellRingingIcon as BellRinging,
@@ -29,6 +29,12 @@ import {
   UsersThreeIcon as UsersThree,
   WifiHighIcon as WifiHigh,
   XIcon as X,
+  UploadSimpleIcon as UploadSimple,
+  FilmStripIcon as FilmStrip,
+  ImageSquareIcon as ImageSquare,
+  ArrowUpIcon as ArrowUp,
+  ArrowDownIcon as ArrowDown,
+  ListIcon as List,
 } from "@phosphor-icons/react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
@@ -40,15 +46,21 @@ const navItems = [
   { id: "schedules", label: "Графики", icon: ChartLineUp, meta: "Все смены" },
   { id: "adminSchedules", label: "График админов", icon: CalendarBlank, meta: "Сводка" },
   { id: "monthlyLoad", label: "Загрузка", icon: ChartLineUp, meta: "За месяц" },
+  { id: "media", label: "Медиатека", icon: FilmStrip, meta: "Фото и видео" },
   { id: "users", label: "Telegram", icon: UsersThree, meta: "Доступы" },
   { id: "commands", label: "Команды", icon: Command, meta: "Управление" },
 ];
-const mainNavItems = navItems.filter((item) => !["administrators", "adminSchedules"].includes(item.id));
+const mainNavItems = navItems.filter((item) => !["administrators", "adminSchedules", "media", "users"].includes(item.id));
 const administratorNavItems = [
   { id: "adminDashboard", label: "Обзор админов", icon: Activity, meta: "Dashboard" },
   { id: "administrators", label: "Администраторы", icon: UserGear, meta: "Список и календарь" },
   { id: "adminSchedules", label: "Графики админов", icon: CalendarBlank, meta: "Смены и время" },
   { id: "adminLoad", label: "Загрузка админов", icon: ChartLineUp, meta: "За месяц" },
+  { id: "users", label: "Telegram", icon: UsersThree, meta: "Пользователи и роли" },
+];
+const mediaNavItems = [
+  { id: "mediaLibrary", label: "Медиатека", icon: FilmStrip, meta: "Все файлы" },
+  { id: "mediaUpload", label: "Загрузка", icon: UploadSimple, meta: "Добавить файлы" },
 ];
 const activityData = [
   { time: "08:00", requests: 18, telegram: 9 }, { time: "10:00", requests: 31, telegram: 16 },
@@ -609,6 +621,131 @@ function AdministratorDashboard({ administrators }) {
   </div>;
 }
 
+function MediaLibrary({ canManage, setToast, uploadOnly = false }) {
+  const inputRef = useRef(null);
+  const [files, setFiles] = useState([]);
+  const [directory, setDirectory] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [dragging, setDragging] = useState(false);
+
+  const loadMedia = useCallback(async () => {
+    try {
+      const result = await api("/api/media");
+      setFiles(result.files || []);
+      setDirectory(result.directory || "");
+    } catch (requestError) {
+      setToast(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [setToast]);
+
+  useEffect(() => { loadMedia(); }, [loadMedia]);
+
+  function uploadFiles(selectedFiles) {
+    const selected = [...selectedFiles].filter((file) => file.type.startsWith("video/") || file.type.startsWith("image/"));
+    if (!selected.length || !canManage) return;
+    const form = new FormData();
+    selected.forEach((file) => form.append("files", file));
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/media/upload");
+    try {
+      const userId = JSON.parse(sessionStorage.getItem("backinfo-qr-user"))?.id;
+      if (userId) request.setRequestHeader("x-telegram-user-id", userId);
+    } catch { /* no session */ }
+    setUploading(true);
+    setProgress(0);
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) setProgress(Math.round(event.loaded / event.total * 100));
+    };
+    request.onload = () => {
+      setUploading(false);
+      if (request.status >= 200 && request.status < 300) {
+        const result = JSON.parse(request.responseText);
+        setFiles(result.files || []);
+        setToast(`Загружено файлов: ${result.uploaded?.length || selected.length}`);
+      } else {
+        try { setToast(JSON.parse(request.responseText).error || "Ошибка загрузки"); }
+        catch { setToast("Ошибка загрузки файлов"); }
+      }
+    };
+    request.onerror = () => { setUploading(false); setToast("Соединение с сервером прервано"); };
+    request.send(form);
+  }
+
+  async function deleteMedia(file) {
+    if (!window.confirm(`Удалить файл «${file.name}»?`)) return;
+    const result = await api(`/api/media/${encodeURIComponent(file.name)}`, { method: "DELETE" });
+    setFiles(result.files || []);
+    setToast("Файл удалён");
+  }
+
+  async function moveMedia(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= files.length) return;
+    const reordered = [...files];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setFiles(reordered);
+    try {
+      const result = await api("/api/media/order", {
+        method: "PUT",
+        body: JSON.stringify({ files: reordered.map((file) => file.name) }),
+      });
+      setFiles(result.files || reordered);
+    } catch (requestError) {
+      setToast(requestError.message);
+      loadMedia();
+    }
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+  }
+
+  return <div className="media-library">
+    <div className="data-heading">
+      <div><span>MEDIA STUDIO</span><h2>{uploadOnly ? "Загрузка файлов" : "Медиатека Electron"}</h2></div>
+      <div className="heading-actions"><b>{files.length} файлов</b>{canManage &&
+        <button onClick={() => inputRef.current?.click()}><UploadSimple size={17} /> Загрузить</button>}</div>
+    </div>
+    <input ref={inputRef} hidden type="file" multiple accept="video/*,image/*" onChange={(event) => uploadFiles(event.target.files)} />
+    {canManage && (uploadOnly || !files.length) && <div className={`media-dropzone ${dragging ? "dragging" : ""}`}
+      onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => { event.preventDefault(); setDragging(false); uploadFiles(event.dataTransfer.files); }}
+      onClick={() => !uploading && inputRef.current?.click()}>
+      <UploadSimple size={32} weight="duotone" />
+      <div><strong>{uploading ? `Загрузка ${progress}%` : "Перетащите фото или видео сюда"}</strong>
+        <small>{uploading ? "Не закрывайте страницу до завершения" : "или нажмите, чтобы выбрать до 20 файлов"}</small></div>
+      {uploading && <div className="media-upload-progress"><i style={{ width: `${progress}%` }} /></div>}
+    </div>}
+    <div className="media-location"><FilmStrip size={16} /><span>Папка воспроизведения:</span><code>{directory || "backelectron/original"}</code></div>
+    {loading ? <div className="loading-state">Загружаем медиатеку…</div> :
+      <div className="media-grid">
+        {files.map((file, index) => <article className="media-card" key={file.name}>
+          <div className="media-preview">
+            {file.type === "video"
+              ? <video src={file.url} muted preload="metadata" />
+              : <img src={file.url} alt={file.name} loading="lazy" />}
+            <span>{file.type === "video" ? <FilmStrip size={15} /> : <ImageSquare size={15} />}{file.type === "video" ? "Видео" : "Фото"}</span>
+            <b>{String(index + 1).padStart(2, "0")}</b>
+          </div>
+          <div className="media-card-body"><strong title={file.name}>{file.name}</strong>
+            <small>{formatSize(file.size)} · {new Date(file.updatedAt).toLocaleDateString("ru-RU")}</small></div>
+          {canManage && <div className="media-card-actions">
+            <button disabled={index === 0} onClick={() => moveMedia(index, -1)} title="Переместить выше"><ArrowUp size={16} /></button>
+            <button disabled={index === files.length - 1} onClick={() => moveMedia(index, 1)} title="Переместить ниже"><ArrowDown size={16} /></button>
+            <button className="delete" onClick={() => deleteMedia(file)} title="Удалить"><Trash size={16} /></button>
+          </div>}
+        </article>)}
+        {!files.length && <div className="media-empty"><FilmStrip size={42} /><strong>Медиатека пуста</strong><span>Загрузите первое видео или изображение</span></div>}
+      </div>}
+  </div>;
+}
+
 function MonthlyWorkload({ doctors, administrators }) {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -692,7 +829,13 @@ function MonthlyWorkload({ doctors, administrators }) {
 export function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const [adminActiveTab, setAdminActiveTab] = useState("adminDashboard");
-  const [dashboardMode, setDashboardMode] = useState(() => window.location.pathname === "/admin-dashboard" ? "admin" : "main");
+  const [mediaActiveTab, setMediaActiveTab] = useState("mediaLibrary");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dashboardMode, setDashboardMode] = useState(() => {
+    if (window.location.pathname === "/admin-dashboard") return "admin";
+    if (window.location.pathname === "/media-dashboard") return "media";
+    return "main";
+  });
   const [data, setData] = useState({ doctors: [], administrators: [], telegramUsers: [], commands: [], display: { theme: "dark" } });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -769,18 +912,23 @@ export function App() {
     setToast(message);
     await loadData();
   }
-  const visibleNavItems = dashboardMode === "admin" ? administratorNavItems : mainNavItems;
-  const visibleTab = dashboardMode === "admin" ? adminActiveTab : activeTab;
+  const visibleNavItems = dashboardMode === "admin" ? administratorNavItems : dashboardMode === "media" ? mediaNavItems : mainNavItems;
+  const visibleTab = dashboardMode === "admin" ? adminActiveTab : dashboardMode === "media" ? mediaActiveTab : activeTab;
   const pageTitle = visibleNavItems.find((item) => item.id === visibleTab)?.label;
 
   const switchDashboard = useCallback((mode) => {
     setDashboardMode(mode);
-    const path = mode === "admin" ? "/admin-dashboard" : "/";
+    setMobileMenuOpen(false);
+    const path = mode === "admin" ? "/admin-dashboard" : mode === "media" ? "/media-dashboard" : "/";
     window.history.pushState({ dashboardMode: mode }, "", path);
   }, []);
 
   useEffect(() => {
-    const handleNavigation = () => setDashboardMode(window.location.pathname === "/admin-dashboard" ? "admin" : "main");
+    const handleNavigation = () => {
+      if (window.location.pathname === "/admin-dashboard") setDashboardMode("admin");
+      else if (window.location.pathname === "/media-dashboard") setDashboardMode("media");
+      else setDashboardMode("main");
+    };
     window.addEventListener("popstate", handleNavigation);
     return () => window.removeEventListener("popstate", handleNavigation);
   }, []);
@@ -791,6 +939,9 @@ export function App() {
 
   return <main className={`dashboard-shell theme-${theme}`}>
     <header className="topbar">
+      <button className="burger-button" onClick={() => setMobileMenuOpen((open) => !open)} aria-label="Открыть меню" aria-expanded={mobileMenuOpen}>
+        {mobileMenuOpen ? <X size={22} /> : <List size={22} />}
+      </button>
       <div className="brand-logo-wrap">
         <img className="apollo-logo" src="/assets/neonmate-plus-logo.png" alt="NeonMate Plus" />
         <span>MEDICAL DISPLAY CONTROL</span>
@@ -799,6 +950,7 @@ export function App() {
       <div className="dashboard-slider" title="Переключить dashboard">
         <button className={dashboardMode === "main" ? "active" : ""} onClick={() => switchDashboard("main")}>Общий</button>
         <button className={dashboardMode === "admin" ? "active" : ""} onClick={() => switchDashboard("admin")}>Админы</button>
+        <button className={dashboardMode === "media" ? "active" : ""} onClick={() => switchDashboard("media")}>Медиа</button>
       </div>
       <button className="theme-switch" onClick={toggleTheme} aria-label="Сменить тему" title={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}>
         <Sun size={15} weight="fill" />
@@ -814,9 +966,15 @@ export function App() {
     </header>
 
     <div className="dashboard-grid">
-      <aside className="side-nav">
-        <div className="side-label">{dashboardMode === "admin" ? "АДМИН-ПАНЕЛЬ" : "МОДУЛИ СИСТЕМЫ"}</div>
-        {visibleNavItems.map(({ id, label, icon: Icon, meta }) => <button key={id} className={`nav-card ${visibleTab === id ? "active" : ""}`} onClick={() => dashboardMode === "admin" ? setAdminActiveTab(id) : setActiveTab(id)}>
+      {mobileMenuOpen && <button className="mobile-menu-backdrop" aria-label="Закрыть меню" onClick={() => setMobileMenuOpen(false)} />}
+      <aside className={`side-nav ${mobileMenuOpen ? "mobile-open" : ""}`}>
+        <div className="side-label">{dashboardMode === "admin" ? "АДМИН-ПАНЕЛЬ" : dashboardMode === "media" ? "MEDIA STUDIO" : "МОДУЛИ СИСТЕМЫ"}</div>
+        {visibleNavItems.map(({ id, label, icon: Icon, meta }) => <button key={id} className={`nav-card ${visibleTab === id ? "active" : ""}`} onClick={() => {
+          if (dashboardMode === "admin") setAdminActiveTab(id);
+          else if (dashboardMode === "media") setMediaActiveTab(id);
+          else setActiveTab(id);
+          setMobileMenuOpen(false);
+        }}>
           <Icon size={30} weight="duotone" /><span><strong>{label}</strong><small>{meta}</small></span>
         </button>)}
         <div className="connection-card"><Broadcast size={24} weight="duotone" /><div><strong>Electron</strong><span>Экран подключён</span></div><i /></div>
@@ -870,10 +1028,10 @@ export function App() {
               <DoctorRow doctor={doctor} onEdit={setEditingDoctor} onDelete={deleteDoctor} key={doctor.id} />)}</div>
           </div>}
 
-          {dashboardMode === "main" && activeTab === "users" && <div className="data-section">
+          {dashboardMode === "admin" && adminActiveTab === "users" && <div className="data-section">
             <div className="data-heading"><div><span>TELEGRAM USERS</span><h2>Пользователи бота</h2></div><b>{data.telegramUsers.length} пользователей</b></div>
             <div className="data-table">{data.telegramUsers.length ? data.telegramUsers.map((user) =>
-              <UserRow user={user} onToggle={toggleUser} onRoleChange={changeUserRole} canManage={["owner", "admin"].includes(authenticatedUser?.role)} busy={busyUser === user.chatId} key={user.chatId} />)
+              <UserRow user={user} onToggle={toggleUser} onRoleChange={changeUserRole} canManage={authenticatedUser?.role === "owner"} busy={busyUser === user.chatId} key={user.chatId} />)
               : <div className="empty-table">Пользователи появятся после команды /start в Telegram.</div>}</div>
           </div>}
 
@@ -884,6 +1042,10 @@ export function App() {
           {dashboardMode === "admin" && adminActiveTab === "adminSchedules" && <ScheduleOverview doctors={[]} administrators={data.administrators || []} administratorsOnly />}
 
           {dashboardMode === "main" && activeTab === "monthlyLoad" && <MonthlyWorkload doctors={data.doctors} administrators={data.administrators || []} />}
+
+          {dashboardMode === "media" && mediaActiveTab === "mediaLibrary" && <MediaLibrary canManage={["owner", "admin"].includes(authenticatedUser?.role)} setToast={setToast} />}
+
+          {dashboardMode === "media" && mediaActiveTab === "mediaUpload" && <MediaLibrary uploadOnly canManage={["owner", "admin"].includes(authenticatedUser?.role)} setToast={setToast} />}
 
           {dashboardMode === "admin" && adminActiveTab === "adminLoad" && <MonthlyWorkload doctors={[]} administrators={data.administrators || []} />}
 
