@@ -276,6 +276,99 @@
   cursor: pointer;
 }
 
+.admin-avatar {
+  overflow: hidden;
+}
+
+.admin-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.admin-profile-editor {
+  margin-bottom: 8px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--classic-border);
+  border-radius: 6px;
+  background: var(--classic-bg);
+}
+
+.admin-profile-avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--classic-border);
+  border-radius: 50%;
+  color: var(--classic-primary);
+  background: var(--classic-card);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-profile-editor > div:nth-child(2) {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.admin-profile-editor > div:nth-child(2) strong {
+  overflow: hidden;
+  color: var(--classic-text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-profile-editor > div:nth-child(2) small {
+  color: var(--classic-muted);
+  font-size: 8px;
+}
+
+.admin-avatar-button {
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--classic-border);
+  border-radius: 5px;
+  color: var(--classic-text);
+  background: var(--classic-card);
+  cursor: pointer;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.admin-avatar-button input {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .admin-profile-editor {
+    flex-wrap: wrap;
+  }
+
+  .admin-avatar-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .avatar-crop-backdrop {
   position: fixed;
   z-index: 80;

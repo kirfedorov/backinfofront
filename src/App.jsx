@@ -458,6 +458,8 @@ function AdministratorSection({ administrators, onChanged, setToast }) {
   const [newAdmin, setNewAdmin] = useState({ firstName: "", lastName: "", middleName: "", phone: "" });
   const [savingDate, setSavingDate] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
+  const [cropSource, setCropSource] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!administrators.some((item) => item.id === selectedId)) {
@@ -553,6 +555,30 @@ function AdministratorSection({ administrators, onChanged, setToast }) {
     } catch (error) { setToast(error.message); }
   }
 
+  async function uploadAdministratorAvatar(file) {
+    if (!selected) return;
+    setUploadingAvatar(true);
+    try {
+      const data = new FormData();
+      data.append("avatar", file);
+      let telegramUserId = "";
+      try { telegramUserId = JSON.parse(sessionStorage.getItem("backinfo-qr-user"))?.id || ""; } catch { /* no session */ }
+      const response = await fetch(`/api/administrators/${selected.id}/avatar`, {
+        method: "POST",
+        headers: telegramUserId ? { "x-telegram-user-id": telegramUserId } : {},
+        body: data,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Не удалось загрузить фотографию");
+      setToast("Аватар администратора обновлён");
+      await onChanged();
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   return <div className="admin-section">
     <div className="data-heading">
       <div><span>РАСПИСАНИЕ АДМИНИСТРАТОРОВ</span><h2>Рабочий календарь</h2></div>
@@ -570,7 +596,9 @@ function AdministratorSection({ administrators, onChanged, setToast }) {
         {administrators.map((administrator) => {
           const name = [administrator.lastName, administrator.firstName, administrator.middleName].filter(Boolean).join(" ");
           return <button className={`admin-card ${selectedId === administrator.id ? "selected" : ""}`} onClick={() => setSelectedId(administrator.id)} key={administrator.id}>
-            <span className="admin-avatar">{administrator.firstName.slice(0, 1)}</span>
+            <span className="admin-avatar">{administrator.avatarUrl
+              ? <img src={administrator.avatarUrl} alt="" />
+              : administrator.firstName.slice(0, 1)}</span>
             <span><strong>{name}</strong><small>{administrator.phone || "Телефон не указан"}</small></span>
             <i>{(administrator.workDates || []).filter((date) => date.startsWith(localDateKey(month).slice(0, 7))).length} дн.</i>
             <span className="admin-delete" onClick={(event) => { event.stopPropagation(); deleteAdministrator(administrator); }}><Trash size={15} /></span>
@@ -578,6 +606,22 @@ function AdministratorSection({ administrators, onChanged, setToast }) {
         })}
       </aside>
       <section className="calendar-panel">
+        {selected && <div className="admin-profile-editor">
+          <div className="admin-profile-avatar">{selected.avatarUrl
+            ? <img src={selected.avatarUrl} alt="" />
+            : <span>{[selected.lastName, selected.firstName].filter(Boolean).map((part) => part[0]).join("").slice(0, 2)}</span>}</div>
+          <div><strong>{[selected.lastName, selected.firstName, selected.middleName].filter(Boolean).join(" ")}</strong>
+            <small>JPG, PNG или WebP · обрезка 512×512</small></div>
+          <label className="admin-avatar-button">
+            <UploadSimple size={16} /> {uploadingAvatar ? "Загрузка…" : "Изменить фото"}
+            <input disabled={uploadingAvatar} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              setCropSource(URL.createObjectURL(file));
+              event.target.value = "";
+            }} />
+          </label>
+        </div>}
         <header>
           <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><CaretLeft size={18} /></button>
           <div><CalendarBlank size={20} /><strong>{month.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}</strong></div>
@@ -610,6 +654,14 @@ function AdministratorSection({ administrators, onChanged, setToast }) {
         <footer><span><i className="legend-work" /> Рабочий день</span><span><i className="legend-today" /> Сегодня</span><strong>{selected ? "Нажмите на дату, чтобы изменить график" : "Выберите администратора"}</strong></footer>
       </section>
     </div>
+    {cropSource && <AvatarCropDialog source={cropSource} onCancel={() => {
+      URL.revokeObjectURL(cropSource);
+      setCropSource("");
+    }} onApply={(file) => {
+      URL.revokeObjectURL(cropSource);
+      setCropSource("");
+      void uploadAdministratorAvatar(file);
+    }} />}
   </div>;
 }
 
