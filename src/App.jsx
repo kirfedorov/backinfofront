@@ -38,6 +38,7 @@ import {
 } from "@phosphor-icons/react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
+import Cropper from "react-easy-crop";
 
 const navItems = [
   { id: "overview", label: "Обзор", icon: Activity, meta: "Система" },
@@ -45,7 +46,7 @@ const navItems = [
   { id: "administrators", label: "Админы", icon: UserGear, meta: "Календарь" },
   { id: "schedules", label: "Графики", icon: ChartLineUp, meta: "Все смены" },
   { id: "adminSchedules", label: "График админов", icon: CalendarBlank, meta: "Сводка" },
-  { id: "monthlyLoad", label: "Загрузка", icon: ChartLineUp, meta: "За месяц" },
+  { id: "monthlyLoad", label: "TimeWork", icon: ChartLineUp, meta: "За месяц" },
   { id: "media", label: "Медиатека", icon: FilmStrip, meta: "Фото и видео" },
   { id: "users", label: "Telegram", icon: UsersThree, meta: "Доступы" },
   { id: "commands", label: "Команды", icon: Command, meta: "Управление" },
@@ -172,10 +173,12 @@ function StatCard({ icon: Icon, label, value, detail, tone = "blue" }) {
   </article>;
 }
 
-function DoctorRow({ doctor, onEdit, onDelete }) {
+function DoctorRow({ doctor, onEdit, onDelete, canManage }) {
   const workingDays = new Set((doctor.schedule || []).map((item) => item.weekday));
   return <div className="doctor-row">
-    <div className="doctor-avatar"><Stethoscope size={20} weight="duotone" /></div>
+    <div className="doctor-avatar">{doctor.avatarUrl
+      ? <img src={doctor.avatarUrl} alt="" />
+      : <Stethoscope size={20} weight="duotone" />}</div>
     <div className="doctor-identity">
       <strong>{[doctor.lastName, doctor.firstName, doctor.middleName].filter(Boolean).join(" ")}</strong>
       <span>{doctor.specialty || "Специальность не указана"}</span>
@@ -183,10 +186,77 @@ function DoctorRow({ doctor, onEdit, onDelete }) {
     <span className="room">Каб. {doctor.room || "—"}</span>
     <div className="weekdays">{weekdays.map(([label, value]) =>
       <span className={workingDays.has(value) ? "active" : ""} key={label}>{label}</span>)}</div>
-    <div className="doctor-actions">
+    {canManage && <div className="doctor-actions">
       <button onClick={() => onEdit(doctor)} title="Редактировать"><PencilSimple size={16} /></button>
       <button className="delete" onClick={() => onDelete(doctor)} title="Удалить"><Trash size={16} /></button>
-    </div>
+    </div>}
+  </div>;
+}
+
+async function createCroppedAvatar(source, cropPixels) {
+  const image = await new Promise((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = reject;
+    element.src = source;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    image,
+    cropPixels.x,
+    cropPixels.y,
+    cropPixels.width,
+    cropPixels.height,
+    0,
+    0,
+    512,
+    512,
+  );
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Не удалось обработать фотографию")), "image/jpeg", 0.86);
+  });
+}
+
+function AvatarCropDialog({ source, onCancel, onApply }) {
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [cropPixels, setCropPixels] = useState(null);
+  const [processing, setProcessing] = useState(false);
+
+  async function applyCrop() {
+    if (!cropPixels) return;
+    setProcessing(true);
+    try {
+      const blob = await createCroppedAvatar(source, cropPixels);
+      onApply(new File([blob], `doctor-avatar-${Date.now()}.jpg`, { type: "image/jpeg" }));
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  return <div className="avatar-crop-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+    <section className="avatar-crop-dialog">
+      <header><div><span>РЕДАКТОР ФОТОГРАФИИ</span><h3>Настройте аватар врача</h3></div>
+        <button type="button" onClick={onCancel}><X size={20} /></button></header>
+      <div className="avatar-crop-stage">
+        <Cropper image={source} crop={crop} zoom={zoom} aspect={1} cropShape="round" showGrid
+          onCropChange={setCrop} onZoomChange={setZoom}
+          onCropComplete={(_area, pixels) => setCropPixels(pixels)} />
+      </div>
+      <div className="avatar-crop-controls">
+        <label><span>Масштаб</span><input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
+        <small>Перетаскивайте фотографию мышью или пальцем. Светлая область попадёт в аватар 512×512.</small>
+      </div>
+      <footer><button type="button" className="secondary-button" onClick={onCancel}>Отмена</button>
+        <button type="button" className="primary-button" disabled={processing || !cropPixels} onClick={applyCrop}>
+          {processing ? "Обработка…" : "Обрезать и применить"}
+        </button></footer>
+    </section>
   </div>;
 }
 
@@ -205,6 +275,9 @@ function DoctorEditor({ doctor, onClose, onSaved }) {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(doctor?.avatarUrl || "");
+  const [cropSource, setCropSource] = useState("");
 
   function setField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -241,13 +314,26 @@ function DoctorEditor({ doctor, onClose, onSaved }) {
     setSaving(true);
     setFormError("");
     try {
-      await api(doctor ? `/api/doctors/${doctor.id}` : "/api/doctors", {
+      const savedDoctor = await api(doctor ? `/api/doctors/${doctor.id}` : "/api/doctors", {
         method: doctor ? "PUT" : "POST",
         body: JSON.stringify({
           ...form,
           schedule: [...form.schedule].sort((a, b) => a.weekday - b.weekday),
         }),
       });
+      if (avatarFile) {
+        const avatarData = new FormData();
+        avatarData.append("avatar", avatarFile);
+        let telegramUserId = "";
+        try { telegramUserId = JSON.parse(sessionStorage.getItem("backinfo-qr-user"))?.id || ""; } catch { /* no session */ }
+        const avatarResponse = await fetch(`/api/doctors/${savedDoctor.id}/avatar`, {
+          method: "POST",
+          headers: telegramUserId ? { "x-telegram-user-id": telegramUserId } : {},
+          body: avatarData,
+        });
+        const avatarResult = await avatarResponse.json();
+        if (!avatarResponse.ok) throw new Error(avatarResult.error || "Не удалось загрузить фотографию");
+      }
       onSaved(doctor ? "Данные врача обновлены" : "Врач добавлен");
     } catch (requestError) {
       setFormError(requestError.message);
@@ -261,6 +347,17 @@ function DoctorEditor({ doctor, onClose, onSaved }) {
       <div className="editor-header">
         <div><span>КАРТОЧКА ВРАЧА</span><h2>{doctor ? "Редактирование" : "Новый врач"}</h2></div>
         <button type="button" className="close-button" onClick={onClose}><X size={20} /></button>
+      </div>
+      <div className="doctor-avatar-editor">
+        <div>{avatarPreview ? <img src={avatarPreview} alt="Фото врача" /> : <Stethoscope size={34} weight="duotone" />}</div>
+        <label><strong>Фотография врача</strong><span>JPG, PNG или WebP, до 8 МБ</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            setCropSource(URL.createObjectURL(file));
+            event.target.value = "";
+          }} />
+        </label>
       </div>
       <div className="form-grid">
         <label>Фамилия<input required value={form.lastName} onChange={(e) => setField("lastName", e.target.value)} /></label>
@@ -314,6 +411,16 @@ function DoctorEditor({ doctor, onClose, onSaved }) {
         <button type="button" className="secondary-button" onClick={onClose}>Отмена</button>
         <button type="submit" className="primary-button" disabled={saving}><FloppyDisk size={18} /> {saving ? "Сохранение…" : "Сохранить"}</button>
       </div>
+      {cropSource && <AvatarCropDialog source={cropSource} onCancel={() => {
+        URL.revokeObjectURL(cropSource);
+        setCropSource("");
+      }} onApply={(file) => {
+        const preview = URL.createObjectURL(file);
+        URL.revokeObjectURL(cropSource);
+        setAvatarFile(file);
+        setAvatarPreview(preview);
+        setCropSource("");
+      }} />}
     </form>
   </div>;
 }
@@ -850,6 +957,7 @@ export function App() {
   const currentUser = authenticatedUser
     ? [authenticatedUser.firstName, authenticatedUser.lastName].filter(Boolean).join(" ") || `@${authenticatedUser.username || authenticatedUser.id}`
     : "";
+  const canManageDoctors = ["owner", "admin"].includes(authenticatedUser?.role);
 
   function toggleTheme() {
     setTheme((current) => {
@@ -1023,9 +1131,9 @@ export function App() {
 
           {dashboardMode === "main" && activeTab === "doctors" && <div className="data-section">
             <div className="data-heading"><div><span>МЕДИЦИНСКИЙ ПЕРСОНАЛ</span><h2>Список врачей</h2></div>
-              <div className="heading-actions"><b>{data.doctors.length} записей</b><button onClick={() => setEditingDoctor(null)}><Plus size={17} /> Добавить врача</button></div></div>
+              <div className="heading-actions"><b>{data.doctors.length} записей</b>{canManageDoctors && <button onClick={() => setEditingDoctor(null)}><Plus size={17} /> Добавить врача</button>}</div></div>
             <div className="data-table">{data.doctors.map((doctor) =>
-              <DoctorRow doctor={doctor} onEdit={setEditingDoctor} onDelete={deleteDoctor} key={doctor.id} />)}</div>
+              <DoctorRow doctor={doctor} onEdit={setEditingDoctor} onDelete={deleteDoctor} canManage={canManageDoctors} key={doctor.id} />)}</div>
           </div>}
 
           {dashboardMode === "admin" && adminActiveTab === "users" && <div className="data-section">
