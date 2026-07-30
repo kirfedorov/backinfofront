@@ -35,6 +35,7 @@ import {
   ArrowUpIcon as ArrowUp,
   ArrowDownIcon as ArrowDown,
   ListIcon as List,
+  SlidersHorizontalIcon as SlidersHorizontal,
 } from "@phosphor-icons/react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
@@ -62,6 +63,7 @@ const administratorNavItems = [
 const mediaNavItems = [
   { id: "mediaLibrary", label: "Медиатека", icon: FilmStrip, meta: "Все файлы" },
   { id: "mediaUpload", label: "Загрузка", icon: UploadSimple, meta: "Добавить файлы" },
+  { id: "displaySettings", label: "Настройки экрана", icon: SlidersHorizontal, meta: "Только админ" },
 ];
 const activityData = [
   { time: "08:00", requests: 18, telegram: 9 }, { time: "10:00", requests: 31, telegram: 16 },
@@ -171,6 +173,148 @@ function StatCard({ icon: Icon, label, value, detail, tone = "blue" }) {
     <div className="stat-top"><span>{label}</span><Icon size={18} weight="duotone" /></div>
     <strong>{value}</strong><small><CheckCircle size={13} weight="fill" /> {detail}</small>
   </article>;
+}
+
+function DisplaySettings({ display, onSaved, setToast }) {
+  const [showEverySeconds, setShowEverySeconds] = useState(display.showEverySeconds || 45);
+  const [displayTheme, setDisplayTheme] = useState(display.theme || "dark");
+  const [weatherLocation, setWeatherLocation] = useState(display.weatherLocation || {
+    name: "Москва", latitude: 55.7558, longitude: 37.6176,
+  });
+  const [pages, setPages] = useState(display.pages || {
+    doctors: { enabled: true, durationSeconds: 15 },
+    weather: { enabled: true, durationSeconds: 12 },
+    calendar: { enabled: true, durationSeconds: 12 },
+    currency: { enabled: true, durationSeconds: 12 },
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setShowEverySeconds(display.showEverySeconds || 45);
+    setDisplayTheme(display.theme || "dark");
+    if (display.weatherLocation) setWeatherLocation(display.weatherLocation);
+    if (display.pages) setPages(display.pages);
+  }, [display.showEverySeconds, display.theme, display.weatherLocation, display.pages]);
+
+  const pageCatalog = [
+    ["doctors", "Расписание врачей", "Врачи, кабинеты и рабочие дни"],
+    ["weather", "Погода", "Температура, влажность и ветер"],
+    ["calendar", "Календарь и время", "Текущий месяц и большие часы"],
+    ["currency", "Курсы валют", "Официальные курсы доллара и евро"],
+  ];
+  const enabledPageSeconds = pageCatalog.reduce((total, [id]) =>
+    total + (pages[id]?.enabled ? Number(pages[id].durationSeconds || 0) : 0), 0);
+  const fullCycleSeconds = Number(showEverySeconds || 0) * pageCatalog.filter(([id]) => pages[id]?.enabled).length
+    + enabledPageSeconds;
+
+  function updatePage(id, changes) {
+    setPages((current) => ({
+      ...current,
+      [id]: { ...current[id], ...changes },
+    }));
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await api("/api/admin/display/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          showEverySeconds: Number(showEverySeconds),
+          theme: displayTheme,
+          weatherLocation: {
+            ...weatherLocation,
+            latitude: Number(weatherLocation.latitude),
+            longitude: Number(weatherLocation.longitude),
+          },
+          pages,
+        }),
+      });
+      setToast("Настройки переданы Electron и будут сохранены локально");
+      await onSaved();
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="display-settings-layout">
+    <form className="panel display-settings-card" onSubmit={save}>
+      <div className="panel-title">
+        <div><span>ЛОКАЛЬНЫЙ ELECTRON</span><strong>Параметры показа расписания</strong></div>
+        <SlidersHorizontal size={22} weight="duotone" />
+      </div>
+      <p className="settings-description">
+        После сохранения Electron заберёт изменения и запишет их в локальный
+        файл <code>backelectron/config/display-settings.json</code>.
+      </p>
+      <div className="settings-fields">
+        <label>
+          <span>Медиаконтент между страницами</span>
+          <div><input type="number" min="10" max="3600" step="1"
+            value={showEverySeconds}
+            onChange={(event) => setShowEverySeconds(event.target.value)} />
+            <b>сек.</b></div>
+          <small>Пауза с роликом/слайдами перед следующей инфостраницей</small>
+        </label>
+        <label>
+          <span>Тема табло</span>
+          <select value={displayTheme} onChange={(event) => setDisplayTheme(event.target.value)}>
+            <option value="dark">Тёмная</option>
+            <option value="light">Светлая</option>
+          </select>
+          <small>Тема полноэкранного расписания врачей</small>
+        </label>
+      </div>
+      <div className="display-page-settings">
+        {pageCatalog.map(([id, title, description]) => <article className={`display-page-card ${pages[id]?.enabled ? "enabled" : ""}`} key={id}>
+          <label className="page-toggle">
+            <input type="checkbox" checked={Boolean(pages[id]?.enabled)}
+              onChange={(event) => updatePage(id, { enabled: event.target.checked })} />
+            <span><strong>{title}</strong><small>{description}</small></span>
+          </label>
+          <label className="page-duration">
+            <span>Показывать</span>
+            <input type="number" min="5" max="300" value={pages[id]?.durationSeconds || 12}
+              disabled={!pages[id]?.enabled}
+              onChange={(event) => updatePage(id, { durationSeconds: Number(event.target.value) })} />
+            <b>сек.</b>
+          </label>
+        </article>)}
+      </div>
+      <div className="weather-location-settings">
+        <strong>Местоположение для погоды</strong>
+        <input value={weatherLocation.name}
+          onChange={(event) => setWeatherLocation((current) => ({ ...current, name: event.target.value }))}
+          placeholder="Город" />
+        <input type="number" step="0.0001" value={weatherLocation.latitude}
+          onChange={(event) => setWeatherLocation((current) => ({ ...current, latitude: event.target.value }))}
+          placeholder="Широта" />
+        <input type="number" step="0.0001" value={weatherLocation.longitude}
+          onChange={(event) => setWeatherLocation((current) => ({ ...current, longitude: event.target.value }))}
+          placeholder="Долгота" />
+      </div>
+      <button className="settings-save-button" disabled={saving} type="submit">
+        <FloppyDisk size={18} /> {saving ? "Сохранение…" : "Сохранить настройки"}
+      </button>
+    </form>
+    <article className="panel settings-status-card">
+      <span>ТЕКУЩИЕ ЗНАЧЕНИЯ</span>
+      <strong>{fullCycleSeconds} сек.</strong>
+      <p>Полный цикл всех включённых страниц и медиаконтента</p>
+      <div className="cycle-breakdown">
+        <span>Инфостраницы <b>{enabledPageSeconds} сек.</b></span>
+        <span>Медиа-блоки <b>{fullCycleSeconds - enabledPageSeconds} сек.</b></span>
+        <span>Включено страниц <b>{pageCatalog.filter(([id]) => pages[id]?.enabled).length}</b></span>
+      </div>
+      <div className="settings-storage-note">
+        <Desktop size={24} weight="duotone" />
+        <div><b>Хранение на Electron</b><small>Backend держит только временное состояние синхронизации</small></div>
+      </div>
+    </article>
+  </div>;
 }
 
 function DoctorRow({ doctor, onEdit, onDelete, canManage }) {
@@ -1072,13 +1216,21 @@ export function App() {
     setToast(message);
     await loadData();
   }
-  const visibleNavItems = dashboardMode === "admin" ? administratorNavItems : dashboardMode === "media" ? mediaNavItems : mainNavItems;
+  const visibleMediaNavItems = canManageDoctors
+    ? mediaNavItems
+    : mediaNavItems.filter((item) => item.id !== "displaySettings");
+  const visibleNavItems = dashboardMode === "admin"
+    ? administratorNavItems
+    : dashboardMode === "media"
+      ? visibleMediaNavItems
+      : mainNavItems;
   const visibleTab = dashboardMode === "admin" ? adminActiveTab : dashboardMode === "media" ? mediaActiveTab : activeTab;
   const pageTitle = visibleNavItems.find((item) => item.id === visibleTab)?.label;
 
   const switchDashboard = useCallback((mode) => {
     setDashboardMode(mode);
     setMobileMenuOpen(false);
+    if (mode === "media") setMediaActiveTab("mediaLibrary");
     const path = mode === "admin" ? "/admin-dashboard" : mode === "media" ? "/media-dashboard" : "/";
     window.history.pushState({ dashboardMode: mode }, "", path);
   }, []);
@@ -1206,6 +1358,9 @@ export function App() {
           {dashboardMode === "media" && mediaActiveTab === "mediaLibrary" && <MediaLibrary canManage={["owner", "admin"].includes(authenticatedUser?.role)} setToast={setToast} />}
 
           {dashboardMode === "media" && mediaActiveTab === "mediaUpload" && <MediaLibrary uploadOnly canManage={["owner", "admin"].includes(authenticatedUser?.role)} setToast={setToast} />}
+
+          {dashboardMode === "media" && mediaActiveTab === "displaySettings" && canManageDoctors &&
+            <DisplaySettings display={data.display || {}} onSaved={loadData} setToast={setToast} />}
 
           {dashboardMode === "admin" && adminActiveTab === "adminLoad" && <MonthlyWorkload doctors={[]} administrators={data.administrators || []} />}
 
